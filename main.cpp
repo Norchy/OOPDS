@@ -2,19 +2,52 @@
 #include <cstdint>
 #include <fstream>
 #include <sstream>
-#include <vector>
-#include <queue>
+
 
 using namespace std;
 
 
-class VirtualMachine; 
+class VirtualMachine;
 
 struct Instruction {
     int count;
     string operat;
     string opr1;
     string opr2;
+    Instruction() : count(0), operat(""), opr1(""), opr2("") {}
+};
+
+class InstructionArray {
+    Instruction* data;
+    int capacity;
+    int size;
+
+    void resize(){
+        capacity *= 2;
+        Instruction* newData = new Instruction[capacity];
+        for (int i = 0; i < size; i++)
+            newData[i] = data[i];
+        delete[] data;
+        data = newData;
+    }
+
+    public:
+        InstructionArray() : capacity(16), size(0){
+            data = new Instruction[capacity];
+        }
+
+        ~InstructionArray(){
+            delete[] data;
+        }
+
+        void push_back(const Instruction& inst){
+            if (size >= capacity) resize();
+            data[size++] = inst;
+        }
+
+        Instruction& get(int index){ return data[index]; }
+
+        int getSize() const { return size; }
 };
 
 class Commands {
@@ -22,23 +55,71 @@ class Commands {
         Instruction inst;
 
     public:
-        virtual void execute(VirtualMachine& vm) = 0; 
+        virtual void execute(VirtualMachine& vm) = 0;
         virtual ~Commands() {}
 };
 
+struct QueueNode {
+    Commands* data;
+    QueueNode* next;
+    QueueNode(Commands* d) : data(d), next(nullptr) {}
+};
+
+class CommandQueue {
+    private:
+        QueueNode* front;
+        QueueNode* rear;
+        int count;
+
+    public:
+        CommandQueue() : front(nullptr), rear(nullptr), count(0) {}
+
+        ~CommandQueue(){
+            while (!empty()){
+                QueueNode* temp = front;
+                front = front->next;
+                delete temp;
+            }
+        }
+
+        bool empty() const {
+            return front == nullptr;
+        }
+
+        void push(Commands* cmd){
+            QueueNode* node = new QueueNode(cmd);
+            if (rear == nullptr){
+                front = rear = node;
+            } else {
+                rear->next = node;
+                rear = node;
+            }
+            count++;
+        }
+
+        Commands* getFront(){ return front->data; }
+
+        void pop(){
+            if (empty()) return;
+            QueueNode* temp = front;
+            front = front->next;
+            if (front == nullptr) rear = nullptr;
+            delete temp;
+            count--;
+        }
+};
+
 class SingleOperand : public Commands {
-    public: 
+    public:
         SingleOperand(Instruction t){ inst = t; }
         void execute (VirtualMachine& vm) override;
 };
 
 class DoubleOperand : public Commands {
-    public: 
+    public:
         DoubleOperand(Instruction t){ inst = t; }
-        void execute (VirtualMachine& vm) override {
-            cout << "Two operand command" << endl;
-            cout << inst.operat << " : " << inst.opr1 << " : "  << inst.opr2 << endl;
-        }
+        void execute (VirtualMachine& vm) override;
+
 };
 
 string removeComma(string str){
@@ -49,6 +130,20 @@ string removeComma(string str){
     }
     return str2;
 }
+
+string removeBrackets(string str){
+    string str2 = "";
+    for (size_t i = 0; i < str.length(); i++){
+        if (str[i] != '[' && str[i] != ']')
+            str2.push_back(str[i]);
+    }
+    return str2;
+}
+
+bool hasBrackets(const string& str){
+    return str.find('[') != string::npos;
+}
+
 
 
  // 8 data register //
@@ -92,16 +187,16 @@ string removeComma(string str){
 class STACKERROR {
     private:
         const char* errormsg;
-    
+
     public:
         explicit STACKERROR(const char* msg) : errormsg(msg) {}
 
-        const char* what() const { 
+        const char* what() const {
             return errormsg;
         }
 };
 
-class STACK { 
+class STACK {
     private:
         static const int MAX_STACK = 8;
         int8_t data[MAX_STACK];
@@ -135,7 +230,7 @@ class STACK {
     int8_t pop(){
         if (empty()) {
             cerr << "ERROR: Stack is empty";
-            exit(1); 
+            exit(1);
         }
 
         int8_t temp = data[top];
@@ -174,11 +269,11 @@ class STACK {
     private:
         DataRegisters Dreg; // Class composition
         Memory Mem; // Class composition
-        Flags flags; // Class composition 
+        Flags flags; // Class composition
         STACK Stack;  // Class composition
 
-        uint8_t PC; 
-    
+        uint8_t PC;
+
     public:
         void barrier() { cout << "---------------------------------" << endl; }
         void intro () { cout << "-------- Virtual Machine --------" << endl; }
@@ -193,12 +288,12 @@ class STACK {
         Flags& getFlags() { return flags; }
         STACK& getStack() { return Stack; }
 
-        uint8_t getSI() const { 
-            return Stack.getSIValue(); 
+        uint8_t getSI() const {
+            return Stack.getSIValue();
         }
 
         uint8_t getPC() const { return PC; }
-        void incPC(){ PC++; } 
+        void incPC(){ PC++; }
 
         void dump () {
             intro();
@@ -208,12 +303,12 @@ class STACK {
             cout << "#Registers#";
             for (int i = 0; i < 8; i++) {
                 int val = (int)Dreg.getReg(i);
-                
+
                 if (val >= 0) {
                     if (val < 10) cout << "000" << val << "#";
                     else if (val < 100) cout << "00" << val << "#";
                     else cout << "0" << val << "#";
-                } 
+                }
                 else {
                     int absVal = -val;
                     if (absVal < 10) cout << "-00" << absVal << "#";
@@ -243,7 +338,7 @@ class STACK {
 
                     currentCmd->execute(*this);
 
-                    this->incPC(); 
+                    this->incPC();
 
 
                     dump();
@@ -252,7 +347,7 @@ class STACK {
             }
             catch (const STACKERROR& e) {
                 cerr << "Stack Error:  " << e.what() << endl;
-                exit(1); 
+                exit(1);
             }
         }
  };
@@ -270,7 +365,7 @@ void SingleOperand::execute(VirtualMachine& vm) {
                 if (inputVal == 0) vm.getFlags().Z = true;
                 vm.getRegisters().setReg(regIdx, static_cast<int8_t>(inputVal));
             }
-        } 
+        }
         else if (inst.operat == "DISPLAY") {
             cout << (int)vm.getRegisters().getReg(regIdx) << endl;
         }
@@ -320,7 +415,7 @@ int main() {
     }
     input.close();
 
-    queue<Commands *> prg;  
+    queue<Commands *> prg;
     for ( auto &x : PROGRAM ){
         if (x.count == 3)
             prg.push(new DoubleOperand(x));
