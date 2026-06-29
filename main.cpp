@@ -230,15 +230,38 @@ class STACK {
         }
  };
 
+ // Class Flags (Implemented by Megat)
  class Flags {
-    bool Z, C, O, U;
+       public:
+        bool Z, C, O, U;
 
-    public:
         Flags () {
             initFlags();
         }
         void initFlags() {
             Z = U = O = C = false;
+        }
+
+        // called after every arithmetic operation with the raw integer result
+        // OF set if result > 127, UF set if result < -128
+        // CF set if result is out of 8-bit range (same condition as OF or UF)
+        // ZF set if the truncated 8-bit result equals zero
+        void updateFlags(int result){
+            initFlags();
+            if (result > 127)                  O = true;
+            if (result < -128)                 U = true;
+            if (result > 127 || result < -128) C = true;
+            if ((int8_t)result == 0)           Z = true;
+        }
+
+        // resets a single named flag to false, used by the RESET instruction
+        // e.g. RESET CF sets C = false without touching the other flags
+        void resetFlag(const string& flagName){
+            if      (flagName == "CF") C = false;
+            else if (flagName == "OF") O = false;
+            else if (flagName == "UF") U = false;
+            else if (flagName == "ZF") Z = false;
+            else cerr << "Unknown flag: " << flagName << endl;
         }
  };
 
@@ -269,10 +292,9 @@ class STACK {
 
         uint8_t getPC() const { return PC; }
         void incPC(){ PC++; }
-
+        
+        // Function dump()      (Implemented by Megat)
         void dump () {
-            intro();
-
             cout << "#Begin#" << endl;
 
             cout << "#Registers#";
@@ -293,8 +315,18 @@ class STACK {
             }
             cout << endl;
             
-            barrier();
-            cout << "PC =" << (int)PC << endl;
+            cout << "#Flags#OF#" << flags.O << "#UF#" << flags.U << "#CF#" << flags.C << "#ZF#" << flags.Z << "#" << endl;
+
+            cout << "#PC#";
+            int pcVal = (int)PC;
+            if (pcVal < 10) cout << "000" << pcVal;
+            else if (pcVal < 100) cout << "00" << pcVal;
+            else cout << "0" << pcVal;
+            cout << "#" << endl;
+
+            Mem.dumpMemory(); 
+
+            cout << "#End#" << endl; 
         }
 
         void Runner(queue<Commands*>& programQueue) {
@@ -350,6 +382,165 @@ void SingleOperand::execute(VirtualMachine& vm) {
         cout << inst.operat << " : " << inst.opr1 << endl;
     }
 }
+
+// ===========================================================
+// Function: DoubleOperand::execute
+
+// Implemented instruction groups:
+//   - MOV (3.4)        : Megat
+//   - ADD/SUB/MUL/DIV  : Megat
+//   - ROL/ROR (3.7)    : Megat
+//   - SHL/SHR (3.8)    : Megat
+//   - LOAD/STORE (3.9) : Azim
+
+// ===========================================================
+void DoubleOperand::execute(VirtualMachine& vm) {
+    string op   = inst.operat;
+    string opr1 = inst.opr1;
+    string opr2 = inst.opr2;
+
+    DataRegisters& regs  = vm.getRegisters();
+    Memory&        mem   = vm.getMemory();
+    Flags&         flags = vm.getFlags();
+
+    // ---- MOV ---- (3.4) Alan
+    // mode 1: MOV R0, 10    -- load immediate value into register
+    // mode 2: MOV R0, R1    -- copy register to register
+    // mode 3: MOV R3, [R1]  -- read from memory address stored in R1
+    if (op == "MOV"){
+        int destIdx = regs.getIndex(opr1);
+        if (destIdx == -1){ cerr << "MOV: bad destination " << opr1 << endl; return; }
+
+        if (hasBrackets(opr2)){
+            // MOV R3, [R1] -- read from memory at address stored in R1
+            string inner = removeBrackets(opr2);
+            int srcIdx = regs.getIndex(inner);
+            if (srcIdx != -1){
+                int addr = (int)(uint8_t)regs.getReg(srcIdx);
+                regs.setReg(destIdx, mem.getMemory(addr));
+            } else {
+                cerr << "MOV: bad source register in brackets" << endl;
+            }
+        }
+        else if (regs.getIndex(opr2) != -1){
+            // MOV R0, R1 -- register to register
+            regs.setReg(destIdx, regs.getReg(regs.getIndex(opr2)));
+        }
+        else {
+            // MOV R0, 10 -- immediate value
+            int val = stoi(opr2);
+            regs.setReg(destIdx, (int8_t)val);
+        }
+        return;
+    }
+
+    // ---- ADD ---- (3.5)  Implemented by Megat
+    // adds source to destination, stores in destination, updates flags
+    if (op == "ADD"){
+        int destIdx = regs.getIndex(opr1);
+        int srcIdx  = regs.getIndex(opr2);
+        if (destIdx == -1){ cerr << "ADD: bad register" << endl; return; }
+        int srcVal = (srcIdx != -1) ? (int)regs.getReg(srcIdx) : stoi(opr2);
+        int result = (int)regs.getReg(destIdx) + srcVal;
+        flags.updateFlags(result);
+        regs.setReg(destIdx, (int8_t)result);
+        return;
+    }
+
+    // ---- SUB ---- (3.5) Implemented by Megat
+    // subtracts source from destination, stores in destination, updates flags
+    if (op == "SUB"){
+        int destIdx = regs.getIndex(opr1);
+        int srcIdx  = regs.getIndex(opr2);
+        if (destIdx == -1){ cerr << "SUB: bad register" << endl; return; }
+        int srcVal = (srcIdx != -1) ? (int)regs.getReg(srcIdx) : stoi(opr2);
+        int result = (int)regs.getReg(destIdx) - srcVal;
+        flags.updateFlags(result);
+        regs.setReg(destIdx, (int8_t)result);
+        return;
+    }
+
+    // ---- MUL ---- (3.5) Implemented by Megat
+    // multiplies destination by source, stores in destination, updates flags
+    if (op == "MUL"){
+        int destIdx = regs.getIndex(opr1);
+        int srcIdx  = regs.getIndex(opr2);
+        if (destIdx == -1){ cerr << "MUL: bad register" << endl; return; }
+        int srcVal = (srcIdx != -1) ? (int)regs.getReg(srcIdx) : stoi(opr2);
+        int result = (int)regs.getReg(destIdx) * srcVal;
+        flags.updateFlags(result);
+        regs.setReg(destIdx, (int8_t)result);
+        return;
+    }
+
+    // ---- DIV ---- (3.5) Implemented by Megat
+    // divides destination by source, stores in destination, updates flags
+    // exits with error if source is zero to prevent division by zero
+    if (op == "DIV"){
+        int destIdx = regs.getIndex(opr1);
+        int srcIdx  = regs.getIndex(opr2);
+        if (destIdx == -1){ cerr << "DIV: bad register" << endl; return; }
+        int srcVal = (srcIdx != -1) ? (int)regs.getReg(srcIdx) : stoi(opr2);
+        if (srcVal == 0){ cerr << "DIV: division by zero" << endl; exit(1); }
+        int result = (int)regs.getReg(destIdx) / srcVal;
+        flags.updateFlags(result);
+        regs.setReg(destIdx, (int8_t)result);
+        return;
+    }
+
+    // ---- ROL ---- (3.7) Implemented by Megat
+    // rotates bits of destination left by count positions
+    // bits shifted out from the left wrap around to the right
+    if (op == "ROL"){
+        int destIdx = regs.getIndex(opr1);
+        if (destIdx == -1){ cerr << "ROL: bad register" << endl; return; }
+        int count = stoi(opr2) % 8;
+        uint8_t val = (uint8_t)regs.getReg(destIdx);
+        uint8_t result = (val << count) | (val >> (8 - count));
+        regs.setReg(destIdx, (int8_t)result);
+        return;
+    }
+
+    // ---- ROR ---- (3.7) Implemented by Megat
+    // rotates bits of destination right by count positions
+    // bits shifted out from the right wrap around to the left
+    if (op == "ROR"){
+        int destIdx = regs.getIndex(opr1);
+        if (destIdx == -1){ cerr << "ROR: bad register" << endl; return; }
+        int count = stoi(opr2) % 8;
+        uint8_t val = (uint8_t)regs.getReg(destIdx);
+        uint8_t result = (val >> count) | (val << (8 - count));
+        regs.setReg(destIdx, (int8_t)result);
+        return;
+    }
+
+    // ---- SHL ---- (3.8) Implemented by Megat
+    // shifts bits of destination left by count positions
+    // vacated bit positions on the right are filled with 0
+    // shifting 8 or more times results in 0
+    if (op == "SHL"){
+        int destIdx = regs.getIndex(opr1);
+        if (destIdx == -1){ cerr << "SHL: bad register" << endl; return; }
+        int count = stoi(opr2);
+        uint8_t val = (uint8_t)regs.getReg(destIdx);
+        uint8_t result = (count >= 8) ? 0 : (val << count);
+        regs.setReg(destIdx, (int8_t)result);
+        return;
+    }
+
+    // ---- SHR ---- (3.8) Implemented by Megat
+    // shifts bits of destination right by count positions
+    // vacated bit positions on the left are filled with 0
+    // shifting 8 or more times results in 0
+    if (op == "SHR"){
+        int destIdx = regs.getIndex(opr1);
+        if (destIdx == -1){ cerr << "SHR: bad register" << endl; return; }
+        int count = stoi(opr2);
+        uint8_t val = (uint8_t)regs.getReg(destIdx);
+        uint8_t result = (count >= 8) ? 0 : (val >> count);
+        regs.setReg(destIdx, (int8_t)result);
+        return;
+    }
 
 int main() {
 
