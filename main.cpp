@@ -14,8 +14,14 @@ struct Instruction {
     string operat;
     string opr1;
     string opr2;
-    Instruction() : count(0), operat(""), opr1(""), opr2("") {}
+    Instruction() : count(0), operat(""), opr1(""), opr2("") {} // needed so InstructionArray can create blank Instruction objects internally
+
 };
+
+//InstructionArray class
+// custom dynamic array that starts with capacity 16, doubles in size whenever it is full
+
+
 
 class InstructionArray {
     Instruction* data;
@@ -59,11 +65,17 @@ class Commands {
         virtual ~Commands() {}
 };
 
+// a single node in the linked list used by CommandQueue below
+
 struct QueueNode {
     Commands* data;
     QueueNode* next;
     QueueNode(Commands* d) : data(d), next(nullptr) {}
 };
+
+// CommandQueue class
+// custom linked-list queue that supports push, pop, getFront, empty, and auto-cleanup
+
 
 class CommandQueue {
     private:
@@ -131,6 +143,9 @@ string removeComma(string str){
     return str2;
 }
 
+// strips [ and ] from a token, e.g. "[R1]" becomes "R1", "[20]" becomes "20"
+// used when parsing memory operands in MOV, LOAD, STORE
+
 string removeBrackets(string str){
     string str2 = "";
     for (size_t i = 0; i < str.length(); i++){
@@ -140,6 +155,7 @@ string removeBrackets(string str){
     return str2;
 }
 
+// returns true if a token contains '[', indicating it is a memory reference
 bool hasBrackets(const string& str){
     return str.find('[') != string::npos;
 }
@@ -361,7 +377,7 @@ class STACK {
 
         uint8_t getPC() const { return PC; }
         void incPC(){ PC++; }
-        
+
         // Function dump()      (Implemented by Megat)
         void dump () {
             cout << "#Begin#" << endl;
@@ -383,7 +399,7 @@ class STACK {
                 }
             }
             cout << endl;
-            
+
             cout << "#Flags#OF#" << flags.O << "#UF#" << flags.U << "#CF#" << flags.C << "#ZF#" << flags.Z << "#" << endl;
 
             cout << "#PC#";
@@ -393,9 +409,9 @@ class STACK {
             else cout << "0" << pcVal;
             cout << "#" << endl;
 
-            Mem.dumpMemory(); 
+            Mem.dumpMemory();
 
-            cout << "#End#" << endl; 
+            cout << "#End#" << endl;
         }
 
         void Runner(CommandQueue& programQueue) {
@@ -696,7 +712,7 @@ void DoubleOperand::execute(VirtualMachine& vm) {
             }
         }
         else {
-            // STORE 20, R3   -- address first, register second 
+            // STORE 20, R3   -- address first, register second
             if (regIdxOpr2 == -1) { cerr << "STORE: bad source register" << endl; return; }
             int addr = stoi(opr1);
             mem.setMemory(addr, regs.getReg(regIdxOpr2));
@@ -742,7 +758,7 @@ int main() {
     }
     input.close();
 
-    
+
     CommandQueue prg;
     for (int i = 0; i < PROGRAM.getSize(); i++){
         Instruction& x = PROGRAM.get(i);
