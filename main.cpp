@@ -159,6 +159,13 @@ bool hasBrackets(const string& str){
             }
         }
 
+        int getIndex(const string& regStr) {
+            if (regStr.length() == 2 && regStr[0] == 'R' && regStr[1] >= '0' && regStr[1] <= '7') {
+                return regStr[1] - '0';
+            }
+            return -1;
+        }
+
         int8_t getReg(int num) {
             if (num >= 0 && num < 8)
                 return R[num];
@@ -203,7 +210,18 @@ class STACK {
         }
     }
 
+    bool isFull() const {
+        return top >= (MAX_STACK - 1);
+    }
+
+    bool empty() const {
+        return top == -1;
+    }
+
     void push(int8_t value){
+        if (isFull()){
+            throw STACKERROR("ERROR: Stack is full");
+        }
         top++;
         data[top] = value;
     }
@@ -218,6 +236,10 @@ class STACK {
         top--;
         return temp;
     }
+
+    uint8_t getSIValue() const {
+        return static_cast<uint8_t>(top + 1);
+    }
 };
 
  class Memory {
@@ -228,6 +250,49 @@ class STACK {
                 MEM[i] = (int8_t)0;
             }
         }
+
+    // reads one signed byte from memory at the given address
+    // returns 0 and prints error if address is out of range 0-63
+    int8_t getMemory(int addr){
+        if (addr < 0 || addr > 63){
+            cerr << "Memory address out of range: " << addr << endl;
+            return 0;
+        }
+        return MEM[addr];
+    }
+
+    // writes one signed byte to memory at the given address
+    // prints error and does nothing if address is out of range 0-63
+    void setMemory(int addr, int8_t value){
+        if (addr < 0 || addr > 63){
+            cerr << "Memory address out of range: " << addr << endl;
+            return;
+        }
+        MEM[addr] = value;
+    }
+
+    // prints all 64 memory bytes in the required output format
+    // 8 values per row, each formatted as 4 digits e.g. #0044# or #-005#
+    void dumpMemory(){
+        cout << "#Memory#" << endl;
+        for (int row = 0; row < 8; row++){
+            for (int col = 0; col < 8; col++){
+                int val = (int)MEM[row * 8 + col];
+                if (val >= 0){
+                    if (val < 10)        cout << "#000" << val;
+                    else if (val < 100)  cout << "#00"  << val;
+                    else                 cout << "#0"   << val;
+                }
+                else {
+                    int absVal = -val;
+                    if (absVal < 10)       cout << "#-00" << absVal;
+                    else if (absVal < 100) cout << "#-0"  << absVal;
+                    else                   cout << "#-"   << absVal;
+                }
+            }
+            cout << "#" << endl;
+        }
+    }
  };
 
  // Class Flags (Implemented by Megat)
@@ -280,11 +345,15 @@ class STACK {
         void intro () { cout << "-------- Virtual Machine --------" << endl; }
 
 
-        VirtualMachine() {
+        VirtualMachine() : PC(0) {
             Dreg.initReg();
-            Flags.initFlags();
+            flags.initFlags();
         }
 
+        DataRegisters& getRegisters() { return Dreg; }
+        Memory& getMemory() { return Mem; }
+        Flags& getFlags() { return flags; }
+        STACK& getStack() { return Stack; }
 
         uint8_t getSI() const {
             return Stack.getSIValue();
@@ -329,10 +398,10 @@ class STACK {
             cout << "#End#" << endl; 
         }
 
-        void Runner(queue<Commands*>& programQueue) {
+        void Runner(CommandQueue& programQueue) {
             try {
                 while (!programQueue.empty()) {
-                    Commands* currentCmd = programQueue.front();
+                    Commands* currentCmd = programQueue.getFront();
                     programQueue.pop();
 
 
@@ -352,8 +421,43 @@ class STACK {
         }
  };
 
+// SingleOperand::execute
+// string op variable at the top for cleaner comparisons
+// RESET handler at the top (before regIdx check)
+// INC handler
+// DEC handler
 void SingleOperand::execute(VirtualMachine& vm) {
+    // local variable for cleaner if comparisons
+    string op = inst.operat;
+
+    //  RESET instruction
+    // resets one specific flag to false without touching the others
+    // e.g. RESET CF --> C = false
+    if (op == "RESET"){
+        vm.getFlags().resetFlag(inst.opr1);
+        return;
+    }
+
     int regIdx = vm.getRegisters().getIndex(inst.opr1);
+
+    // INC instruction
+    // adds 1 to the destination register and updates all flags
+    if (op == "INC" && regIdx != -1){
+        int result = (int)vm.getRegisters().getReg(regIdx) + 1;
+        vm.getFlags().updateFlags(result);
+        vm.getRegisters().setReg(regIdx, (int8_t)result);
+        return;
+    }
+
+    // DEC instruction
+    // subtracts 1 from the destination register and updates all flags
+    if (op == "DEC" && regIdx != -1){
+        int result = (int)vm.getRegisters().getReg(regIdx) - 1;
+        vm.getFlags().updateFlags(result);
+        vm.getRegisters().setReg(regIdx, (int8_t)result);
+        return;
+    }
+
     if (regIdx != -1) {
         if (inst.operat == "INPUT") {
             cout << "?" << endl;
@@ -542,9 +646,71 @@ void DoubleOperand::execute(VirtualMachine& vm) {
         return;
     }
 
+    // ---- LOAD ---- (3.9)
+    // loads a value from memory into a destination register
+    // LOAD R1, [20]  -- reads from fixed memory address 20
+    // LOAD R1, [R2]  -- reads from address stored in register R2
+    if (op == "LOAD") {
+        int destIdx = regs.getIndex(opr1);
+        if (destIdx == -1) { cerr << "LOAD: bad destination register" << endl; return; }
+        if (!hasBrackets(opr2)) { cerr << "LOAD: missing brackets in " << opr2 << endl; return; }
+
+        string inner = removeBrackets(opr2);
+        int srcRegIdx = regs.getIndex(inner);
+        int addr;
+        if (srcRegIdx != -1) {
+            // LOAD R1, [R2]
+            addr = (int)(uint8_t)regs.getReg(srcRegIdx);
+        }
+        else {
+            // LOAD R1, [20]
+            addr = stoi(inner);
+        }
+        regs.setReg(destIdx, mem.getMemory(addr));
+        return;
+    }
+
+    // ---- STORE ---- (3.9)
+    // stores a register value into memory
+    // STORE R1, 43    -- stores R1 into fixed memory address 43
+    // STORE R1, [R2]  -- stores R1 into the address found in R2
+    if (op == "STORE") {
+        int regIdxOpr1 = regs.getIndex(opr1);
+        int regIdxOpr2 = regs.getIndex(opr2);
+
+        if (regIdxOpr1 != -1) {
+            // STORE R1, 43   or   STORE R1, [R2]
+            int8_t val = regs.getReg(regIdxOpr1);
+            if (hasBrackets(opr2)) {
+                // STORE R1, [R2]
+                string inner = removeBrackets(opr2);
+                int addrRegIdx = regs.getIndex(inner);
+                if (addrRegIdx == -1) { cerr << "STORE: bad address register" << endl; return; }
+                int addr = (int)(uint8_t)regs.getReg(addrRegIdx);
+                mem.setMemory(addr, val);
+            }
+            else {
+                // STORE R1, 43
+                int addr = stoi(opr2);
+                mem.setMemory(addr, val);
+            }
+        }
+        else {
+            // STORE 20, R3   -- address first, register second 
+            if (regIdxOpr2 == -1) { cerr << "STORE: bad source register" << endl; return; }
+            int addr = stoi(opr1);
+            mem.setMemory(addr, regs.getReg(regIdxOpr2));
+        }
+        return;
+    }
+
+    cerr << "Unknown double-operand instruction: " << op << endl;
+
+}
+
 int main() {
 
-    vector<Instruction> PROGRAM;
+    InstructionArray PROGRAM;
     ifstream input ("assembly.asm");
     if (input.fail()){
         cerr << "File not found.";
@@ -570,21 +736,25 @@ int main() {
         }
         inst.count = count;
 
+        if (count == 0) continue;  // skip empty lines in the .asm file
+
         PROGRAM.push_back(inst);
     }
     input.close();
 
-    queue<Commands *> prg;
-    for ( auto &x : PROGRAM ){
+    
+    CommandQueue prg;
+    for (int i = 0; i < PROGRAM.getSize(); i++){
+        Instruction& x = PROGRAM.get(i);
         if (x.count == 3)
             prg.push(new DoubleOperand(x));
         else
             prg.push(new SingleOperand(x));
-    }
+}
 
 
     VirtualMachine vm;
-    vm.Runner();
+    vm.Runner(prg);
 
     return 0;
 }
