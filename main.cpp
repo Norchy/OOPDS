@@ -242,6 +242,7 @@ class STACK {
     }
 };
 
+// ADDED by [Azim]   : getMemory(), setMemory(), dumpMemory() methods
  class Memory {
     int8_t MEM[64];
     public:
@@ -397,23 +398,41 @@ class STACK {
 
             cout << "#End#" << endl; 
         }
-
+        
+        // CHANGED by [Azim] : Runner parameter changed from queue<Commands*> to CommandQueue
+        // CHANGED by [Azim] : programQueue.front() changed to programQueue.getFront()
+        // because custom CommandQueue uses getFront() not front()
+        // everything else inside Runner is identical to [Luqman]'s original
+        // Runner: the main execution loop of the virtual machine
+        // Takes the queue of parsed Commands (built in main()) and executes them
+        // one at a time, in the same order they appeared in the .asm file (FIFO)
         void Runner(CommandQueue& programQueue) {
             try {
                 while (!programQueue.empty()) {
+                    // Get the next instruction waiting at the front of the queue
+                    // without removing it yet
                     Commands* currentCmd = programQueue.getFront();
+                    // Remove that instruction from the queue now that we have a copy of the pointer
                     programQueue.pop();
 
-
+                    // Run the instruction — this calls either SingleOperand::execute()
+                    // or DoubleOperand::execute() depending on the actual object type
+                    // (polymorphism: the correct override is chosen automatically at runtime)
                     currentCmd->execute(*this);
 
+                    // Move the program counter forward by 1 to reflect that
+                    // one more instruction has just finished executing
                     this->incPC();
 
-
+         
                     dump();
+                    // Clean up the current command
                     delete currentCmd;
                  }
-            }
+            }  
+            // If a PUSH is attempted while the stack is already full,
+            // STACK::push() throws a STACKERROR — this catch block stops
+            // the program safely and reports the error instead of crashing silently
             catch (const STACKERROR& e) {
                 cerr << "Stack Error:  " << e.what() << endl;
                 exit(1);
@@ -422,10 +441,11 @@ class STACK {
  };
 
 // SingleOperand::execute
-// string op variable at the top for cleaner comparisons
-// RESET handler at the top (before regIdx check)
-// INC handler
-// DEC handler
+//[Luqman] wrote the INPUT, DISPLAY, PUSH, POP block and the regIdx lookup 
+// ADDED by [Azim]   : string op variable at the top for cleaner comparisons
+// ADDED by [Azim]   : RESET handler at the top (before regIdx check)
+// ADDED by [Azim]   : INC handler
+// ADDED by [Azim]   : DEC handler
 void SingleOperand::execute(VirtualMachine& vm) {
     // local variable for cleaner if comparisons
     string op = inst.operat;
@@ -646,7 +666,7 @@ void DoubleOperand::execute(VirtualMachine& vm) {
         return;
     }
 
-    // ---- LOAD ---- (3.9)
+    // ---- LOAD ---- (3.9) Implemented by Azim
     // loads a value from memory into a destination register
     // LOAD R1, [20]  -- reads from fixed memory address 20
     // LOAD R1, [R2]  -- reads from address stored in register R2
@@ -670,7 +690,7 @@ void DoubleOperand::execute(VirtualMachine& vm) {
         return;
     }
 
-    // ---- STORE ---- (3.9)
+    // ---- STORE ---- (3.9) Implemented by Azim
     // stores a register value into memory
     // STORE R1, 43    -- stores R1 into fixed memory address 43
     // STORE R1, [R2]  -- stores R1 into the address found in R2
@@ -710,7 +730,9 @@ void DoubleOperand::execute(VirtualMachine& vm) {
 
 int main() {
 
-    InstructionArray PROGRAM;
+    InstructionArray PROGRAM; // CHANGED by Azim: was "vector<Instruction> PROGRAM"
+                               // replaced std::vector with a custom dynamic array
+                               // since vector is not allowed in this assignment
     ifstream input ("assembly.asm");
     if (input.fail()){
         cerr << "File not found.";
@@ -736,13 +758,17 @@ int main() {
         }
         inst.count = count;
 
-        if (count == 0) continue;  // skip empty lines in the .asm file
+        // ADDED by Azim: if the line was empty (count == 0), skip it
+        // so blank lines in the .asm file don't get pushed as invalid instructions
+        if (count == 0) continue;  
 
         PROGRAM.push_back(inst);
     }
     input.close();
 
-    
+    // CHANGED by Azim: was "for (auto &x : PROGRAM)" — range-based for loop
+    // doesn't work with the custom InstructionArray, so switched to an
+    // index-based loop using PROGRAM.getSize() and PROGRAM.get(i) instead
     CommandQueue prg;
     for (int i = 0; i < PROGRAM.getSize(); i++){
         Instruction& x = PROGRAM.get(i);
