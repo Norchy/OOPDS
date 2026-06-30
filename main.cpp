@@ -9,6 +9,8 @@ using namespace std;
 
 class VirtualMachine;
 
+
+// added by Nafis
 struct Instruction {
     int count;
     string operat;
@@ -17,7 +19,7 @@ struct Instruction {
     Instruction() : count(0), operat(""), opr1(""), opr2("") {} // needed so InstructionArray can create blank Instruction objects internally
 
 };
-
+// added by Nafis
 //InstructionArray class
 // custom dynamic array that starts with capacity 16, doubles in size whenever it is full
 
@@ -65,6 +67,7 @@ class Commands {
         virtual ~Commands() {}
 };
 
+// added by Nafis
 // a single node in the linked list used by CommandQueue below
 
 struct QueueNode {
@@ -73,6 +76,7 @@ struct QueueNode {
     QueueNode(Commands* d) : data(d), next(nullptr) {}
 };
 
+// added by Nafis
 // CommandQueue class
 // custom linked-list queue that supports push, pop, getFront, empty, and auto-cleanup
 
@@ -142,7 +146,7 @@ string removeComma(string str){
     }
     return str2;
 }
-
+// added by Nafis
 // strips [ and ] from a token, e.g. "[R1]" becomes "R1", "[20]" becomes "20"
 // used when parsing memory operands in MOV, LOAD, STORE
 
@@ -154,7 +158,7 @@ string removeBrackets(string str){
     }
     return str2;
 }
-
+// added by Nafis
 // returns true if a token contains '[', indicating it is a memory reference
 bool hasBrackets(const string& str){
     return str.find('[') != string::npos;
@@ -162,17 +166,17 @@ bool hasBrackets(const string& str){
 
 
 // added by Luqman
- // 8 data register 
- // Acts a the CPU register file. Manages array of 8 data registers from R0 to R7 
+ // 8 data register
+ // Acts a the CPU register file. Manages array of 8 data registers from R0 to R7
  class DataRegisters {
     int8_t R[8];
 
     public:
         //Constructor
-        DataRegisters() { initReg(); } 
+        DataRegisters() { initReg(); }
 
         //Resets register to 0
-        void initReg() { 
+        void initReg() {
             for (int i = 0; i < 8; i++){
                 R[i] = 0;
             }
@@ -438,7 +442,7 @@ class STACK {
 
             cout << "#End#" << endl;
         }
-        
+
         // CHANGED by [Azim] : Runner parameter changed from queue<Commands*> to CommandQueue
         // CHANGED by [Azim] : programQueue.front() changed to programQueue.getFront()
         // because custom CommandQueue uses getFront() not front()
@@ -464,12 +468,12 @@ class STACK {
                     // one more instruction has just finished executing
                     this->incPC();
 
-         
+
                     dump();
                     // Clean up the current command
                     delete currentCmd;
                  }
-            }  
+            }
             // If a PUSH is attempted while the stack is already full,
             // STACK::push() throws a STACKERROR — this catch block stops
             // the program safely and reports the error instead of crashing silently
@@ -481,7 +485,7 @@ class STACK {
  };
 
 // SingleOperand::execute
-//[Luqman] wrote the INPUT, DISPLAY, PUSH, POP block and the regIdx lookup 
+//[Luqman] wrote the INPUT, DISPLAY, PUSH, POP block and the regIdx lookup
 // ADDED by [Azim]   : string op variable at the top for cleaner comparisons
 // ADDED by [Azim]   : RESET handler at the top (before regIdx check)
 // ADDED by [Azim]   : INC handler
@@ -800,7 +804,7 @@ int main() {
 
         // ADDED by Azim: if the line was empty (count == 0), skip it
         // so blank lines in the .asm file don't get pushed as invalid instructions
-        if (count == 0) continue;  
+        if (count == 0) continue;
 
         PROGRAM.push_back(inst);
     }
