@@ -161,20 +161,24 @@ bool hasBrackets(const string& str){
 }
 
 
-
- // 8 data register //
+// added by Luqman
+ // 8 data register 
+ // Acts a the CPU register file. Manages array of 8 data registers from R0 to R7 
  class DataRegisters {
     int8_t R[8];
 
     public:
-        DataRegisters() { initReg(); }
+        //Constructor
+        DataRegisters() { initReg(); } 
 
-        void initReg() {
+        //Resets register to 0
+        void initReg() { 
             for (int i = 0; i < 8; i++){
                 R[i] = 0;
             }
         }
 
+        // converts register name to array index. for example R3 to 3
         int getIndex(const string& regStr) {
             if (regStr.length() == 2 && regStr[0] == 'R' && regStr[1] >= '0' && regStr[1] <= '7') {
                 return regStr[1] - '0';
@@ -182,6 +186,7 @@ bool hasBrackets(const string& str){
             return -1;
         }
 
+        //gets values inside the register
         int8_t getReg(int num) {
             if (num >= 0 && num < 8)
                 return R[num];
@@ -191,6 +196,7 @@ bool hasBrackets(const string& str){
             }
         }
 
+        // puts a new value inside the register
         void setReg(int num, int8_t value){
             if (num >= 0 && num < 8)
                 R[num] = value;
@@ -200,25 +206,33 @@ bool hasBrackets(const string& str){
         }
  };
 
+// added by Luqman
+// an error holder when a stack overflow or breaks
 class STACKERROR {
     private:
+        //hold error message
         const char* errormsg;
 
     public:
+        // constructor that takes the error and store it to the class
         explicit STACKERROR(const char* msg) : errormsg(msg) {}
 
+        // return the stored error
         const char* what() const {
             return errormsg;
         }
 };
 
+// added by Luqman
+// Simulate a stack that can store up to 8 values
 class STACK {
     private:
-        static const int MAX_STACK = 8;
-        int8_t data[MAX_STACK];
-        int top;
+        static const int MAX_STACK = 8; // max number of stack data
+        int8_t data[MAX_STACK]; //array storing values
+        int top; //tracks the top values of the stack
 
     public:
+    //constructor that resets the value to 0
     STACK(){
         top = -1;
         for (int i = 0; i < 8; i++){
@@ -226,14 +240,17 @@ class STACK {
         }
     }
 
+    // checks if stack is full
     bool isFull() const {
         return top >= (MAX_STACK - 1);
     }
 
+    // checks if stack is empty
     bool empty() const {
         return top == -1;
     }
 
+    //push a value on top of the stack if its not full
     void push(int8_t value){
         if (isFull()){
             throw STACKERROR("ERROR: Stack is full");
@@ -242,6 +259,7 @@ class STACK {
         data[top] = value;
     }
 
+    // removes a value from top of the stack if not full
     int8_t pop(){
         if (empty()) {
             cerr << "ERROR: Stack is empty";
@@ -253,6 +271,7 @@ class STACK {
         return temp;
     }
 
+    //returns the size of the stack
     uint8_t getSIValue() const {
         return static_cast<uint8_t>(top + 1);
     }
@@ -347,36 +366,41 @@ class STACK {
         }
  };
 
+
+// added by Luqman
+// Holds all the functions such as registers, flags, runners, stack and memory
  class VirtualMachine {
     private:
+        //connects all the computer functions
         DataRegisters Dreg; // Class composition
         Memory Mem; // Class composition
         Flags flags; // Class composition
         STACK Stack;  // Class composition
 
-        uint8_t PC;
+        uint8_t PC; //program counter
 
     public:
-        void barrier() { cout << "----------------------------" << endl; }
-
-        void intro () { cout << "-------- Virtual Machine --------" << endl; }
-
-
+        //constructor - sets everything to 0
         VirtualMachine() : PC(0) {
             Dreg.initReg();
             flags.initFlags();
         }
 
+        //function that allows outside code access to the class
         DataRegisters& getRegisters() { return Dreg; }
         Memory& getMemory() { return Mem; }
         Flags& getFlags() { return flags; }
         STACK& getStack() { return Stack; }
 
+        //get the current stack value
         uint8_t getSI() const {
             return Stack.getSIValue();
         }
 
+        //gets the current value of program counter
         uint8_t getPC() const { return PC; }
+
+        //increment program counter after each instructions
         void incPC(){ PC++; }
 
         // Function dump()      (Implemented by Megat)
