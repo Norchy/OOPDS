@@ -11,7 +11,8 @@ class VirtualMachine;
 
 
 // added by Nafis
-struct Instruction {
+class Instruction {
+    public:
     int count;
     string operat;
     string opr1;
@@ -70,7 +71,8 @@ class Commands {
 // added by Nafis
 // a single node in the linked list used by CommandQueue below
 
-struct QueueNode {
+class QueueNode {
+    public :
     Commands* data;
     QueueNode* next;
     QueueNode(Commands* d) : data(d), next(nullptr) {}
