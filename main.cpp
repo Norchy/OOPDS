@@ -571,7 +571,7 @@ void DoubleOperand::execute(VirtualMachine& vm) {
     Memory&        mem   = vm.getMemory();
     Flags&         flags = vm.getFlags();
 
-    // ---- MOV ---- (3.4) Alan
+    // ---- MOV ---- (3.4) Implemented by Megat
     // mode 1: MOV R0, 10    -- load immediate value into register
     // mode 2: MOV R0, R1    -- copy register to register
     // mode 3: MOV R3, [R1]  -- read from memory address stored in R1
